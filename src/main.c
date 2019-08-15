@@ -24,6 +24,7 @@ thing_t *search(sqlite3 *, char *);
 int cb_default(void *, int, char **, char **);
 int cb_check_exists(void *, int, char **, char **);
 int did_you_mean(char *);
+void kb_search(int *, int *, char);
 
 const int supp_size = 5;
 const char *supp_commands[] = {
@@ -78,7 +79,7 @@ int main(int argc, char *argv[]) {
         // se encontro la correccion en la db
         printf("I guess you meant \"%s\" instead of \"%s\"!\n", thing->meant, vector[0]);
         memcpy(vector[0], thing->meant, strlen(thing->meant));
-      // } else if (did_you_mean(vector[0])) {
+      } else if (did_you_mean(vector[0])) {
       }
 
       free(thing);
@@ -229,21 +230,23 @@ int did_you_mean(char *command) {
     char correcto = maybe_meant[diff_pos];
 
     // buscar la tecla correcta en el teclado y ver si el typo esta alrededor
-    int fila;
-    int columna;
-    int stop = 0;
+    int fila = 2;
+    int columna = 3;
+    kb_search(&fila, &columna, correcto);
 
-    for (fila = 0; !stop && fila < 3; fila += 1) {
-      for (columna = 0; columna < 10; columna += 1) {
-        if (teclado[fila][columna] == correcto) {
-          stop = 1;
-          break;
-        }
-      }
-    }
-
-    printf("Caracter en pos (%d, %d)\n", fila, columna);
+    // printf("Caracter en pos (%d, %d)\n", fila, columna);
   }
 
   return 0;
+}
+
+void kb_search(int *row, int *column, char search) {
+  // printf("row: %d, column: %d\n", *row, *column);
+  // for (*row = 0; *row < 3; *row += 1) {
+  //   for (*column = 0; *column < 10; *column += 1) {
+  //     if (tolower(teclado[*row][*column]) == tolower(search)) {
+  //       return;
+  //     }
+  //   }
+  // }
 }
