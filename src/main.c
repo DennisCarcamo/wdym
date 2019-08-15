@@ -4,10 +4,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Comandos de prueba:
-// ls, ping, cat, help, top
-
 char **split(char *);
+
+const char *supported[] = {
+  "ls",
+  "ping",
+  "cat",
+  "help",
+  "top"
+};
+
+const char *teclado[] = {
+  "QWERTYUIOP",
+  "ASDFGHJKL ",
+  "ZXCVBNM   "
+};
+
+// TODO:
+// check if its a supported command
+// if it is, execute
+// check if isnt, check in the database
+// if it isnt in the db, check if he meant something else
+// if he did mean something else, ask to save to db
+// save to database
 
 int main() {
   int child;
