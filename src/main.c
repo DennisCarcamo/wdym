@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sqlite3.h>
 
 typedef struct thing_t {
@@ -20,9 +21,9 @@ char **split(char *);
 int supported(char *);
 void execute(char **);
 thing_t *search(sqlite3 *, char *);
-int did_you_mean(char *);
 int cb_default(void *, int, char **, char **);
 int cb_check_exists(void *, int, char **, char **);
+int did_you_mean(char *);
 
 const int supp_size = 5;
 const char *supp_commands[] = {
@@ -34,9 +35,9 @@ const char *supp_commands[] = {
 };
 
 const char *teclado[] = {
-  "QWERTYUIOP",
-  "ASDFGHJKL ",
-  "ZXCVBNM   "
+  "qwertyuiop",
+  "asdfghjkl ",
+  "zxcvbnm   "
 };
 
 // TODO:
@@ -75,8 +76,9 @@ int main(int argc, char *argv[]) {
       thing_t *thing = search(db, vector[0]);
       if (thing->found) {
         // se encontro la correccion en la db
+        printf("I guess you meant \"%s\" instead of \"%s\"!\n", thing->meant, vector[0]);
         memcpy(vector[0], thing->meant, strlen(thing->meant));
-      } else if (did_you_mean(vector[0])) {
+      // } else if (did_you_mean(vector[0])) {
       }
 
       free(thing);
@@ -148,7 +150,7 @@ thing_t *search(sqlite3 *db, char *command) {
   char *error;
   char *sql = "select * from meanings";
 
-  int code = sqlite3_exec(db, sql, cb_check_exists, &thing, &error);
+  int code = sqlite3_exec(db, sql, cb_check_exists, thing, &error);
   if (code != SQLITE_OK) {
     fprintf(stderr, "Error SQL: %s\n", error);
     sqlite3_free(error);
@@ -161,6 +163,31 @@ int cb_default(void *passed, int count, char **data, char **columns) {
   // select * from <tabla>;
   for(int i = 0; i < count; i += 1) {
     printf("%s = %s\n", columns[i], data[i] ? data[i] : "NULL");
+  }
+
+  printf("\n");
+  return 0;
+}
+
+int cb_check_exists(void *passed, int count, char **data, char **columns) {
+  // revisar la db, viendo si ya se ha hecho una correccion con el comando
+  meaning_t meaning;
+  for(int i = 0; i < count; i += 1) {
+    int len = strlen(data[i]);
+    if (strcmp(columns[i], "said") == 0) {
+      memcpy(meaning.said, data[i], len);
+      meaning.said[len] = 0;
+    } else {
+      memcpy(meaning.meant, data[i], len);
+      meaning.meant[len] = 0;
+    }
+  }
+
+  thing_t *thing = (thing_t *) passed;
+  if (strcmp(thing->searching, meaning.said) == 0) {
+    // se ha hecho una correccion anteriormente
+    thing->found = 1;
+    memcpy(thing->meant, meaning.meant, strlen(meaning.meant));
   }
 
   printf("\n");
@@ -201,34 +228,22 @@ int did_you_mean(char *command) {
     char typo = command[diff_pos];
     char correcto = maybe_meant[diff_pos];
 
-    // buscar el typo en el teclado y ver si la tecla correcta esta alrededor
-    for (int fila = 0; fila < 3; fila += 1) {
-      for (int columna = 0; columna < 10; columna += 1) {
+    // buscar la tecla correcta en el teclado y ver si el typo esta alrededor
+    int fila;
+    int columna;
+    int stop = 0;
+
+    for (fila = 0; !stop && fila < 3; fila += 1) {
+      for (columna = 0; columna < 10; columna += 1) {
+        if (teclado[fila][columna] == correcto) {
+          stop = 1;
+          break;
+        }
       }
     }
+
+    printf("Caracter en pos (%d, %d)\n", fila, columna);
   }
 
-  return 0;
-}
-
-int cb_check_exists(void *passed, int count, char **data, char **columns) {
-  // revisar la db, viendo si ya se ha hecho una correccion con el comando
-  meaning_t meaning;
-  for(int i = 0; i < count; i += 1) {
-    if (strcmp(columns[i], "said") == 0) {
-      memcpy(meaning.said, data[i], strlen(data[i]));
-    } else {
-      memcpy(meaning.meant, data[i], strlen(data[i]));
-    }
-  }
-
-  thing_t *thing = (thing_t *) passed;
-  if (strcmp(thing->searching, meaning.said) == 0) {
-    // se ha hecho una correccion anteriormente
-    thing->found = 1;
-    memcpy(thing->meant, meaning.meant, strlen(meaning.meant));
-  }
-
-  printf("\n");
   return 0;
 }
