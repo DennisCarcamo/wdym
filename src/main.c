@@ -24,7 +24,6 @@ thing_t *search(sqlite3 *, char *);
 int cb_default(void *, int, char **, char **);
 int cb_check_exists(void *, int, char **, char **);
 int did_you_mean(char *);
-void kb_search(int *, int *, char);
 
 const int supp_size = 5;
 const char *supp_commands[] = {
@@ -230,23 +229,22 @@ int did_you_mean(char *command) {
     char correcto = maybe_meant[diff_pos];
 
     // buscar la tecla correcta en el teclado y ver si el typo esta alrededor
-    int fila = 2;
-    int columna = 3;
-    kb_search(&fila, &columna, correcto);
+    int found = 0;
+    int fila, columna;
+    for (int i = 0; i < 3; i += 1) {
+      if (found) break;
+      for (int j = 0; j < 10; j += 1) {
+        if (tolower(teclado[i][j]) == tolower(correcto) && !found) {
+          fila = i;
+          columna = j;
+          found = 1;
+          break;
+        }
+      }
+    }
 
-    // printf("Caracter en pos (%d, %d)\n", fila, columna);
+    printf("Caracter en pos (%d, %d)\n", fila, columna);
   }
 
   return 0;
-}
-
-void kb_search(int *row, int *column, char search) {
-  // printf("row: %d, column: %d\n", *row, *column);
-  // for (*row = 0; *row < 3; *row += 1) {
-  //   for (*column = 0; *column < 10; *column += 1) {
-  //     if (tolower(teclado[*row][*column]) == tolower(search)) {
-  //       return;
-  //     }
-  //   }
-  // }
 }
