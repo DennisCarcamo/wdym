@@ -21,13 +21,14 @@ char **split(char *);
 int supported(char *);
 void execute(char **);
 thing_t *search(sqlite3 *, char *);
-int cb_default(void *, int, char **, char **);
 int cb_check_exists(void *, int, char **, char **);
-int did_you_mean(char *);
+void did_you_mean(sqlite3 *, char *);
 
-const int supp_size = 5;
+const int supp_size = 7;
 const char *supp_commands[] = {
   "ls",
+  "lz",
+  "ld",
   "ping",
   "cat",
   "help",
@@ -39,10 +40,6 @@ const char *teclado[] = {
   "asdfghjkl ",
   "zxcvbnm   "
 };
-
-// TODO:
-// if he did mean something else, ask to save to db
-// save to database
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -76,9 +73,10 @@ int main(int argc, char *argv[]) {
       thing_t *thing = search(db, vector[0]);
       if (thing->found) {
         // se encontro la correccion en la db
-        printf("I guess you meant \"%s\" instead of \"%s\"!\n", thing->meant, vector[0]);
+        printf("Supongo que quiso decir \"%s\" en lugar de \"%s\"!\n", thing->meant, vector[0]);
         memcpy(vector[0], thing->meant, strlen(thing->meant));
-      } else if (did_you_mean(vector[0])) {
+      } else {
+        did_you_mean(db, vector[0]);
       }
 
       free(thing);
@@ -88,6 +86,7 @@ int main(int argc, char *argv[]) {
     execute(vector);
   }
 
+  sqlite3_close(db);
   free(buffer);
   return 0;
 }
@@ -148,25 +147,13 @@ thing_t *search(sqlite3 *db, char *command) {
   memcpy(thing->searching, command, strlen(command));
 
   char *error;
-  char *sql = "select * from meanings";
-
-  int code = sqlite3_exec(db, sql, cb_check_exists, thing, &error);
+  int code = sqlite3_exec(db, "select * from meanings", cb_check_exists, thing, &error);
   if (code != SQLITE_OK) {
     fprintf(stderr, "Error SQL: %s\n", error);
     sqlite3_free(error);
   }
 
   return thing;
-}
-
-int cb_default(void *passed, int count, char **data, char **columns) {
-  // select * from <tabla>;
-  for(int i = 0; i < count; i += 1) {
-    printf("%s = %s\n", columns[i], data[i] ? data[i] : "NULL");
-  }
-
-  printf("\n");
-  return 0;
 }
 
 int cb_check_exists(void *passed, int count, char **data, char **columns) {
@@ -190,12 +177,11 @@ int cb_check_exists(void *passed, int count, char **data, char **columns) {
     memcpy(thing->meant, meaning.meant, strlen(meaning.meant));
   }
 
-  printf("\n");
   return 0;
 }
 
-int did_you_mean(char *command) {
-  char *maybe_meant;
+void did_you_mean(sqlite3 *db, char *command) {
+  char meant[15];
   int similarity = 0;
   int diff_pos;
 
@@ -216,7 +202,7 @@ int did_you_mean(char *command) {
 
       if (diferentes == 1) {
         // es posible que typeo mal el comando
-        memcpy(maybe_meant, supp_commands[i], strlen(supp_commands[i]));
+        memcpy(meant, supp_commands[i], strlen(supp_commands[i]));
         similarity = 1;
         break;
       }
@@ -225,8 +211,8 @@ int did_you_mean(char *command) {
 
   if (similarity) {
     // revisar en el teclado si typeo mal
-    char typo = command[diff_pos];
-    char correcto = maybe_meant[diff_pos];
+    char typo = tolower(command[diff_pos]);
+    char correcto = tolower(meant[diff_pos]);
 
     // buscar la tecla correcta en el teclado y ver si el typo esta alrededor
     int found = 0;
@@ -234,7 +220,7 @@ int did_you_mean(char *command) {
     for (int i = 0; i < 3; i += 1) {
       if (found) break;
       for (int j = 0; j < 10; j += 1) {
-        if (tolower(teclado[i][j]) == tolower(correcto) && !found) {
+        if (tolower(teclado[i][j]) == correcto && !found) {
           fila = i;
           columna = j;
           found = 1;
@@ -243,8 +229,47 @@ int did_you_mean(char *command) {
       }
     }
 
-    printf("Caracter en pos (%d, %d)\n", fila, columna);
-  }
+    // revisar si la tecla del typo se encuentra alrededor (en el teclado) de la correcta
+    int f = 0, tfila, tcolumna;
+    for (int i = -1; i <= 1; i += 1) {
+      tfila = fila + i >= 0 && fila + i <= 2 ? fila + i : fila;
+      for (int j = -1; j <= 1; j += 1) {
+        if (i == 0 && j == 0) continue;
+        tcolumna = columna + j >= 0 && columna + j <= 9 ? columna + j : columna;
+        f = f || tolower(teclado[tfila][tcolumna]) == typo;
+      }
+    }
 
-  return 0;
+    if (f) {
+      // preguntar si quiere guardar en la db
+      size_t bufsize = 15;
+      size_t read;
+      char *buffer = (char *) malloc(bufsize);
+      buffer[0] = 0;
+
+      printf("Quizo decir \"%s\" en lugar de \"%s\"? [y/N] ", meant, command);
+      read = getline(&buffer, &bufsize, stdin);
+      buffer[read - 1] = 0;
+
+      if (strcmp(buffer, "y") == 0) {
+        char *error;
+        size_t needed = snprintf(NULL, 0, "insert into meanings values (%s, %s);", command, meant);
+        char *sql = (char *) malloc(needed + 1);
+        sprintf(sql, "insert into meanings values ('%s', '%s');", command, meant);
+        printf("query: '%s'", sql);
+
+        int code = sqlite3_exec(db, sql, 0, 0, &error);
+        if (code != SQLITE_OK) {
+          fprintf(stderr, "Error SQL: %s\n", error);
+          sqlite3_free(error);
+        } else {
+          printf("Se guardo la correccion!\n");
+        }
+
+        free(sql);
+      }
+
+      free(buffer);
+    }
+  }
 }
