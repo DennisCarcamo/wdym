@@ -203,6 +203,8 @@ void did_you_mean(sqlite3 *db, char *command) {
       if (diferentes == 1) {
         // es posible que typeo mal el comando
         memcpy(meant, supp_commands[i], strlen(supp_commands[i]));
+        // XXX posible bug
+        meant[strlen(supp_commands[i])] = 0;
         similarity = 1;
         break;
       }
@@ -247,16 +249,15 @@ void did_you_mean(sqlite3 *db, char *command) {
       char *buffer = (char *) malloc(bufsize);
       buffer[0] = 0;
 
-      printf("Quizo decir \"%s\" en lugar de \"%s\"? [y/N] ", meant, command);
+      printf("Quiso decir \"%s\" en lugar de \"%s\"? [y/N] ", meant, command);
       read = getline(&buffer, &bufsize, stdin);
       buffer[read - 1] = 0;
 
       if (strcmp(buffer, "y") == 0) {
         char *error;
-        size_t needed = snprintf(NULL, 0, "insert into meanings values (%s, %s);", command, meant);
+        size_t needed = snprintf(NULL, 0, "insert into meanings values ('%s', '%s')", command, meant);
         char *sql = (char *) malloc(needed + 1);
-        sprintf(sql, "insert into meanings values ('%s', '%s');", command, meant);
-        printf("query: '%s'", sql);
+        sprintf(sql, "insert into meanings values ('%s', '%s')", command, meant);
 
         int code = sqlite3_exec(db, sql, 0, 0, &error);
         if (code != SQLITE_OK) {
