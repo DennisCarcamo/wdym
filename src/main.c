@@ -67,7 +67,6 @@ int main(int argc, char *argv[]) {
       if (bucket->found) {
         // se encontro la correccion en la db
         printf("Supongo que quiso decir \"%s\" en lugar de \"%s\"!\n", bucket->meant, vector[0]);
-        // XXX posible bug
         int meant_len = strlen(bucket->meant);
         memcpy(vector[0], bucket->meant, meant_len);
         vector[meant_len] = 0;
@@ -139,7 +138,6 @@ void execute(char **vector) {
 }
 
 bucket_t *search(sqlite3 *db, char *command) {
-  // XXX posible bug
   int len_cmd = strlen(command);
   bucket_t *bucket = new_bucket(command, len_cmd);
 
@@ -170,7 +168,6 @@ int cb_check_exists(void *passed, int count, char **data, char **columns) {
   bucket_t *bucket = (bucket_t *) passed;
   if (strcmp(bucket->searching, meaning.said) == 0) {
     // se ha hecho una correccion anteriormente
-    // XXX posible bug
     bucket->found = 1;
     int meant_len = strlen(meaning.meant);
     memcpy(bucket->meant, meaning.meant, meant_len);
@@ -203,7 +200,6 @@ void did_you_mean(sqlite3 *db, char *command) {
       if (diferentes == 1) {
         // es posible que typeo mal el comando
         int supp_cmd_len = strlen(supp_commands[i]);
-        // XXX posible bug
         memcpy(meant, supp_commands[i], supp_cmd_len);
         meant[supp_cmd_len] = 0;
         similarity = 1;
@@ -266,7 +262,6 @@ void did_you_mean(sqlite3 *db, char *command) {
           sqlite3_free(error);
         } else {
           printf("Se guardo la correccion!\n");
-          // XXX posible bug
           memcpy(command, meant, len_cmd);
           command[len_cmd] = 0;
         }
