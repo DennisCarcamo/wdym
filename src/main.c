@@ -18,6 +18,8 @@ void execute(char **);
 bucket_t *search(sqlite3 *, char *);
 int cb_check_exists(void *, int, char **, char **);
 void did_you_mean(sqlite3 *, char *);
+void guardarDB(sqlite3 *, char *, int, char *);
+void switch_chars(char *, int);
 
 const int supp_size = 5;
 const char *supp_commands[] = {
@@ -180,6 +182,7 @@ int cb_check_exists(void *passed, int count, char **data, char **columns) {
 void did_you_mean(sqlite3 *db, char *command) {
   char meant[15];
   int similarity = 0;
+  int switched = 0;
   int diff_pos;
 
   int len_cmd = strlen(command);
@@ -199,16 +202,31 @@ void did_you_mean(sqlite3 *db, char *command) {
 
       if (diferentes == 1) {
         // es posible que typeo mal el comando
-        int supp_cmd_len = strlen(supp_commands[i]);
-        memcpy(meant, supp_commands[i], supp_cmd_len);
-        meant[supp_cmd_len] = 0;
+        memcpy(meant, supp_commands[i], len_cmd);
+        meant[len_cmd] = 0;
         similarity = 1;
         break;
       }
+
+      // switch dos caracteres consecutivos a ver si son iguales al comando con el typo
+      for (int j = 0; j < len_cmd - 1; j += 1) {
+        switch_chars(command, j);
+        if (strcmp(command, supp_commands[i]) == 0) {
+          // typeo mal el comando
+          memcpy(meant, supp_commands[i], len_cmd);
+          meant[len_cmd] = 0;
+          switched = 1;
+        }
+        switch_chars(command, j);
+        if (switched) break;
+      }
+      if (switched) break;
     }
   }
 
-  if (similarity) {
+  if (switched) {
+    guardarDB(db, command, len_cmd, meant);
+  } else if (similarity) {
     // revisar en el teclado si typeo mal
     char typo = tolower(command[diff_pos]);
     char correcto = tolower(meant[diff_pos]);
@@ -240,36 +258,46 @@ void did_you_mean(sqlite3 *db, char *command) {
     }
 
     if (f) {
-      // preguntar si quiere guardar en la db
-      size_t bufsize = 15;
-      size_t read;
-      char *buffer = (char *) malloc(bufsize);
-      buffer[0] = 0;
-
-      printf("Quiso decir \"%s\" en lugar de \"%s\"? [y/N] ", meant, command);
-      read = getline(&buffer, &bufsize, stdin);
-      buffer[read - 1] = 0;
-
-      if (strcmp(buffer, "y") == 0) {
-        char *error;
-        size_t needed = snprintf(NULL, 0, "insert into meanings values ('%s', '%s')", command, meant);
-        char *sql = (char *) malloc(needed + 1);
-        sprintf(sql, "insert into meanings values ('%s', '%s')", command, meant);
-
-        int code = sqlite3_exec(db, sql, 0, 0, &error);
-        if (code != SQLITE_OK) {
-          fprintf(stderr, "Error SQL: %s\n", error);
-          sqlite3_free(error);
-        } else {
-          printf("Se guardo la correccion!\n");
-          memcpy(command, meant, len_cmd);
-          command[len_cmd] = 0;
-        }
-
-        free(sql);
-      }
-
-      free(buffer);
+      guardarDB(db, command, len_cmd, meant);
     }
   }
+}
+
+void guardarDB(sqlite3 *db, char *command, int len_cmd, char *meant) {
+  // preguntar si quiere guardar en la db
+  size_t bufsize = 15;
+  size_t read;
+  char *buffer = (char *) malloc(bufsize);
+  buffer[0] = 0;
+
+  printf("Quiso decir \"%s\" en lugar de \"%s\"? [y/N] ", meant, command);
+  read = getline(&buffer, &bufsize, stdin);
+  buffer[read - 1] = 0;
+
+  if (strcmp(buffer, "y") == 0) {
+    char *error;
+    size_t needed = snprintf(NULL, 0, "insert into meanings values ('%s', '%s')", command, meant);
+    char *sql = (char *) malloc(needed + 1);
+    sprintf(sql, "insert into meanings values ('%s', '%s')", command, meant);
+
+    int code = sqlite3_exec(db, sql, 0, 0, &error);
+    if (code != SQLITE_OK) {
+      fprintf(stderr, "Error SQL: %s\n", error);
+      sqlite3_free(error);
+    } else {
+      printf("Se guardo la correccion!\n");
+      memcpy(command, meant, len_cmd);
+      command[len_cmd] = 0;
+    }
+
+    free(sql);
+  }
+
+  free(buffer);
+}
+
+void switch_chars(char *string, int pos) {
+  char temp = string[pos + 1];
+  string[pos + 1] = string[pos];
+  string[pos] = temp;
 }
